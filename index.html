@@ -1,0 +1,164 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#102d3a">
+<title>CO₂ LAB — Gas cooler enthalpique</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1720;--panel:#122631;--panel2:#193542;--line:#2c4b58;--txt:#eff7f9;--muted:#a9c0c9;--accent:#58d4c0;--warn:#ffcc80;--bad:#ff8b8b}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(160deg,#0b1720,#102936 70%,#0b1720);color:var(--txt);font:16px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;align-items:center;margin:6px 0 22px}.logo{background:#174451;border:1px solid #367a82;border-radius:15px;padding:12px;font-size:24px}h1{font-size:clamp(24px,4vw,34px);margin:0}h2{font-size:19px;margin:0 0 14px}p{margin:6px 0;color:var(--muted)}.pill{font-size:12px;color:#102d3a;background:var(--accent);border-radius:99px;padding:4px 9px;font-weight:800;display:inline-block}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}.panel{background:rgba(18,38,49,.96);border:1px solid var(--line);border-radius:17px;padding:18px;margin-bottom:14px}.fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.field label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}.field input,.field select{width:100%;background:#0b1c25;color:var(--txt);border:1px solid #42606d;border-radius:10px;padding:12px;font:inherit;min-width:0}.field input:focus,.field select:focus{outline:2px solid var(--accent);border-color:transparent}.help{font-size:12px;color:var(--muted);margin-top:5px}.metric{background:#0b1c25;border:1px solid var(--line);border-radius:13px;padding:14px}.metric small{display:block;color:var(--muted);font-size:12px}.metric strong{font-size:clamp(22px,3vw,30px);display:block;margin-top:5px;overflow-wrap:anywhere}.metrics{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.good{color:var(--accent)}.warning{color:var(--warn)}.error{color:var(--bad)}button{background:var(--accent);color:#08232b;border:0;border-radius:11px;padding:12px 16px;font-weight:800;font-size:15px;cursor:pointer}button.secondary{background:#1b3946;color:var(--txt);border:1px solid var(--line)}.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.status{padding:12px 14px;border-radius:11px;background:#0b1c25;border:1px solid var(--line);margin:12px 0}.status.ok{border-color:#347b72}.status.err{border-color:#8c4646;color:#ffc2c2}.formula{font-family:ui-monospace,SFMono-Regular,monospace;background:#0b1c25;border-radius:9px;padding:10px;overflow-wrap:anywhere;color:#d6fff7}.steps{display:grid;gap:9px}.step{padding:12px;border-left:3px solid var(--accent);background:#0b1c25;border-radius:0 9px 9px 0}.step b{display:block;margin-bottom:4px}.tablewrap{overflow:auto}table{border-collapse:collapse;width:100%;font-size:13px}th,td{text-align:right;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}th:first-child,td:first-child{text-align:left}th{color:var(--muted)}details summary{cursor:pointer;color:var(--accent);font-weight:700}.foot{font-size:12px;color:var(--muted);margin:18px 2px}.hidden{display:none}@media(max-width:680px){main{padding:12px}.grid,.fields{grid-template-columns:1fr}.metrics{grid-template-columns:1fr 1fr}.metrics .metric:last-child{grid-column:1/-1}.panel{padding:14px}}
+</style>
+</head>
+<body>
+<main>
+<header><div class="logo">❄</div><div><h1>CO₂ LAB</h1><p>Gas cooler transcritique · calcul enthalpique</p></div></header>
+<div class="panel">
+ <span class="pill" id="enginePill">Initialisation du moteur…</span>
+ <p id="engineText">Chargement de CoolProp WebAssembly. Une connexion Internet est nécessaire au premier chargement.</p>
+</div>
+<div class="grid">
+<section class="panel">
+<h2>1 · Conditions côté CO₂</h2>
+<div class="fields">
+<div class="field"><label for="p">Pression CO₂ (bar)</label><input id="p" type="number" value="96" min="1" step="0.1"></div>
+<div class="field"><label for="mco">Débit massique CO₂ (kg/s)</label><input id="mco" type="number" value="0.056" min="0" step="0.001"><div class="help">Mettre 0 si le débit est inconnu.</div></div>
+<div class="field"><label for="tci">Température CO₂ entrée (°C)</label><input id="tci" type="number" value="123.7" step="0.1"></div>
+<div class="field"><label for="tco">Température CO₂ sortie (°C)</label><input id="tco" type="number" value="15.4" step="0.1"></div>
+<div class="field"><label for="mode">Donnée connue pour le bilan</label><select id="mode"><option value="co2">Débit CO₂ connu → calculer puissance et débit d’eau</option><option value="water">Débit d’eau connu → calculer puissance et débit CO₂</option></select></div>
+<div class="field"><label for="segments">Segments de calcul thermique</label><select id="segments"><option>20</option><option selected>50</option><option>100</option><option>200</option></select><div class="help">Plus de segments = profil thermique plus fin.</div></div>
+</div>
+</section>
+<section class="panel">
+<h2>2 · Conditions côté eau</h2>
+<div class="fields">
+<div class="field"><label for="twi">Entrée eau (°C)</label><input id="twi" type="number" value="9" step="0.1"></div>
+<div class="field"><label for="two">Sortie eau (°C)</label><input id="two" type="number" value="16" step="0.1"></div>
+<div class="field"><label for="mw">Débit eau (kg/s)</label><input id="mw" type="number" value="0.59" min="0" step="0.01"><div class="help">Utilisé si tu choisis « débit d’eau connu ».</div></div>
+<div class="field"><label for="u">Coefficient global U (W/m²·K)</label><input id="u" type="number" value="500" min="1" step="10"></div>
+<div class="field"><label for="area">Surface installée (m²)</label><input id="area" type="number" value="2.87" min="0" step="0.01"></div>
+<div class="field"><label for="margin">Marge surface (%)</label><input id="margin" type="number" value="10" min="0" max="100" step="1"></div>
+</div>
+<div class="help">Le calcul utilise CoolProp pour le CO₂. Pour l’eau, cp est approché à 4,186 kJ/(kg·K).</div>
+<div class="actions"><button id="calc">Calculer</button><button class="secondary" id="reset">Réinitialiser l’exemple</button></div>
+</section>
+</div>
+<section class="panel">
+<h2>3 · Résultats</h2>
+<div id="status" class="status">En attente du chargement de CoolProp…</div>
+<div class="metrics">
+<div class="metric"><small>Puissance thermique CO₂</small><strong id="q">—</strong></div>
+<div class="metric"><small>Débit massique CO₂</small><strong id="mcoOut">—</strong></div>
+<div class="metric"><small>Débit d’eau requis / bilan</small><strong id="mwOut">—</strong></div>
+<div class="metric"><small>Enthalpie CO₂ entrée</small><strong id="hin">—</strong><small>kJ/kg</small></div>
+<div class="metric"><small>Enthalpie CO₂ sortie</small><strong id="hout">—</strong><small>kJ/kg</small></div>
+<div class="metric"><small>Δh CO₂</small><strong id="dh">—</strong><small>kJ/kg</small></div>
+</div>
+<div style="height:12px"></div>
+<div class="metrics">
+<div class="metric"><small>Surface estimée segmentée</small><strong id="areareq">—</strong></div>
+<div class="metric"><small>ΔT minimal calculé</small><strong id="pinch">—</strong></div>
+<div class="metric"><small>Écart bilan CO₂/eau</small><strong id="balance">—</strong></div>
+</div>
+</section>
+<div class="grid">
+<section class="panel"><h2>4 · Comprendre le calcul</h2><div class="steps" id="steps">
+<div class="step"><b>Étape 1 — propriétés réelles</b>CoolProp calcule l’enthalpie à chaque extrémité à partir de P et T.</div>
+<div class="step"><b>Étape 2 — bilan énergétique</b>La puissance est calculée à partir de la différence d’enthalpie et du débit massique.</div>
+<div class="step"><b>Étape 3 — profil segmenté</b>Le CO₂ est divisé en segments ; l’eau évolue en contre-courant et la surface est estimée segment par segment.</div>
+</div></section>
+<section class="panel"><h2>5 · Propriétés calculées</h2><div class="tablewrap"><table><thead><tr><th>Propriété</th><th>Entrée CO₂</th><th>Sortie CO₂</th></tr></thead><tbody>
+<tr><td>Pression</td><td id="tp1">—</td><td id="tp2">—</td></tr><tr><td>Température</td><td id="tt1">—</td><td id="tt2">—</td></tr><tr><td>Densité (kg/m³)</td><td id="rho1">—</td><td id="rho2">—</td></tr><tr><td>Cp local (kJ/kg·K)</td><td id="cp1">—</td><td id="cp2">—</td></tr>
+</tbody></table></div></section>
+</div>
+<section class="panel">
+<details><summary>Hypothèses et limites du modèle</summary>
+<p>Le moteur de propriétés CoolProp fournit les propriétés du CO₂ via l’API PropsSI. Le bilan énergétique est enthalpique. La surface est estimée par une méthode segmentée en contre-courant avec U supposé constant. Ce n’est pas une sélection constructeur : la géométrie des plaques, la distribution des débits, les pertes de charge, l’encrassement et la variation réelle de U ne sont pas modélisés.</p>
+<p>Si un état P-T est dans une zone où le calcul de propriété échoue, l’outil affiche une erreur au lieu de fabriquer une valeur. Les enthalpies ont une référence arbitraire, mais leur différence est exploitable.</p>
+</details>
+</section>
+<p class="foot">CO₂ LAB — outil de pré-dimensionnement pédagogique. CoolProp est un projet open source indépendant. Ne pas utiliser seul pour valider une installation frigorifique.</p>
+</main>
+<script type="module">
+let CP=null;
+const $=id=>document.getElementById(id);
+const fmt=(v,n=2)=>Number.isFinite(v)?v.toLocaleString('fr-FR',{maximumFractionDigits:n}):'—';
+const num=id=>Number($(id).value);
+const set=(id,v)=>$(id).textContent=v;
+function enthalpy(Pbar,Tc){return CP.PropsSI('H','P',Pbar*1e5,'T',Tc+273.15,'CO2')/1000;}
+function prop(out,Pbar,Tc){return CP.PropsSI(out,'P',Pbar*1e5,'T',Tc+273.15,'CO2');}
+function lmtd(a,b){if(a<=0||b<=0)return NaN;if(Math.abs(a-b)<1e-8)return a;return (a-b)/Math.log(a/b);}
+function calculate(){
+ if(!CP){throw new Error('CoolProp n’est pas encore chargé. Vérifie la connexion Internet puis recharge la page.');}
+ const P=num('p'), Ti=num('tci'), To=num('tco'), Twi=num('twi'), Two=num('two');
+ const mcoInput=num('mco'), mwInput=num('mw'), U=num('u'), Ainstalled=num('area'), margin=num('margin')/100, N=num('segments');
+ if([P,Ti,To,Twi,Two,U,margin,N].some(v=>!Number.isFinite(v))||P<=0||Ti<=To||Two<=Twi||U<=0)throw new Error('Vérifie les entrées : pression et U positifs, CO₂ refroidi, eau réchauffée.');
+ const hin=enthalpy(P,Ti), hout=enthalpy(P,To), dh=hin-hout;
+ if(!(dh>0))throw new Error('La différence d’enthalpie n’est pas positive : vérifie les températures et la pression.');
+ let Q,mco,mw;
+ if($('mode').value==='co2'){
+   if(!(mcoInput>0))throw new Error('Saisis un débit CO₂ supérieur à zéro ou choisis le mode débit d’eau connu.');
+   mco=mcoInput; Q=mco*dh; mw=Q/(4.186*(Two-Twi));
+ } else {
+   if(!(mwInput>0))throw new Error('Saisis un débit d’eau supérieur à zéro.');
+   mw=mwInput; Q=mw*4.186*(Two-Twi); mco=Q/dh;
+ }
+ // Segmented counter-current surface calculation. Coordinate x follows CO2 from hot inlet to cold outlet.
+ let surface=0, pinch=Infinity, minD1=Infinity, minD2=Infinity, bad=false;
+ let previousWaterAtHot=Two, previousWaterAtCold=Twi;
+ // At segment boundary x, cumulative heat removed from CO2 is h(Ti)-h(Tx); water temperature at that boundary from hot-side end balance.
+ const hStart=hin;
+ let lastTc=Ti, lastH=hin;
+ for(let i=1;i<=N;i++){
+   const frac=i/N, Tc=Ti+(To-Ti)*frac;
+   const hNow= i===N ? hout : enthalpy(P,Tc);
+   const qseg=mco*(lastH-hNow); // kW
+   // water temperature at the CO2 hot-side position: Tw_hot = Two - heat removed in upstream CO2 sections / (mw*cp)
+   const cumRemoved=mco*(hStart-hNow);
+   const TwAtBoundary=Two-cumRemoved/(mw*4.186);
+   const TwAtPrev=Two-(mco*(hStart-lastH))/(mw*4.186);
+   // Counter-current local end differences: CO2 segment temp versus water at same physical position
+   const dHot=lastTc-TwAtPrev;
+   const dCold=Tc-TwAtBoundary;
+   pinch=Math.min(pinch,dHot,dCold); minD1=Math.min(minD1,dHot); minD2=Math.min(minD2,dCold);
+   if(dHot<=0||dCold<=0){bad=true;}
+   const lm=lmtd(dHot,dCold);
+   if(!Number.isFinite(lm)||lm<=0){bad=true;} else surface+=qseg*1000/(U*lm);
+   lastTc=Tc;lastH=hNow;
+ }
+ const required=surface*(1+margin);
+ const waterQ=mw*4.186*(Two-Twi);
+ set('q',fmt(Q)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3.6)+' m³/h');
+ set('hin',fmt(hin,3));set('hout',fmt(hout,3));set('dh',fmt(dh,3));
+ set('areareq',bad?'Pincement nul/négatif':fmt(required)+' m²');
+ set('pinch',fmt(pinch)+' K');set('balance',fmt(Q-waterQ)+' kW');
+ set('tp1',fmt(P,2)+' bar');set('tp2',fmt(P,2)+' bar');set('tt1',fmt(Ti,2)+' °C');set('tt2',fmt(To,2)+' °C');
+ set('rho1',fmt(prop('D',P,Ti),3));set('rho2',fmt(prop('D',P,To),3));
+ set('cp1',fmt(prop('C',P,Ti)/1000,3));set('cp2',fmt(prop('C',P,To)/1000,3));
+ const warnings=[];
+ if(P>73.773 && To<31) warnings.push('Le CO₂ traverse la région proche du point critique/pseudo-critique : les propriétés varient fortement. Le calcul segmenté est particulièrement important.');
+ if(pinch<=0||bad) warnings.push('Pincement nul ou négatif : ces températures ne permettent pas le transfert thermique demandé dans cette configuration.');
+ if(Math.abs(Q-waterQ)>Math.max(0.2,Q*0.03)) warnings.push('Le bilan CO₂/eau présente un écart important : vérifie que les températures d’eau correspondent bien à la puissance calculée.');
+ if(required>Ainstalled) warnings.push('La surface installée est inférieure à la surface estimée avec U et la marge choisis.');
+ $('status').className='status '+(warnings.length?'err':'ok');
+ $('status').textContent=warnings.length?warnings.join(' '):'Calcul effectué avec les propriétés CoolProp. Vérifie les hypothèses de U, le pincement et les conditions réelles avant tout dimensionnement.';
+ $('steps').innerHTML=`<div class="step"><b>1 — Enthalpies</b>h entrée = ${fmt(hin,3)} kJ/kg ; h sortie = ${fmt(hout,3)} kJ/kg. Δh = ${fmt(dh,3)} kJ/kg.</div><div class="step"><b>2 — Puissance</b>Q = débit CO₂ × Δh = ${fmt(Q,2)} kW.</div><div class="step"><b>3 — Débit d’eau</b>Q / [4,186 × (${fmt(Two)} − ${fmt(Twi)})] = ${fmt(mw,4)} kg/s.</div><div class="step"><b>4 — Surface segmentée</b>Somme des surfaces locales qᵢ/(U × ΔTlmᵢ), puis marge de ${fmt(margin*100,1)} %.</div>`;
+}
+$('calc').addEventListener('click',()=>{try{calculate()}catch(e){$('status').className='status err';$('status').textContent=e.message}});
+$('reset').addEventListener('click',()=>{Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'co2',segments:50,twi:9,two:16,mw:.59,u:500,area:2.87,margin:10}).forEach(([k,v])=>$(k).value=v);if(CP){try{calculate()}catch(e){$('status').textContent=e.message}}});
+['p','mco','tci','tco','mode','segments','twi','two','mw','u','area','margin'].forEach(id=>$(id).addEventListener('change',()=>{if(CP){try{calculate()}catch(e){$('status').className='status err';$('status').textContent=e.message}}}));
+try{
+ const {default:createCoolProp}=await import('https://cdn.jsdelivr.net/npm/coolprop-wasm@6.6.0/wasm/coolprop.js');
+ CP=await createCoolProp();
+ set('enginePill','Moteur CoolProp chargé');$('enginePill').className='pill';
+ set('engineText','Propriétés thermodynamiques calculées dans le navigateur via CoolProp WebAssembly.');$('status').textContent='Moteur prêt. Calcul automatique en cours…';calculate();
+}catch(e){
+ set('enginePill','Moteur non chargé');$('enginePill').style.background='#ffcc80';
+ set('engineText','Le module CoolProp n’a pas pu être chargé. Cette application doit être ouverte depuis une adresse HTTPS (pas directement en fichier local) et nécessite Internet au premier chargement.');
+ $('status').className='status err';$('status').textContent='Erreur de chargement CoolProp : '+(e?.message||String(e))+'. Héberge la page sur HTTPS et vérifie la connexion.';
+}
+</script>
+</body>
+</html>
