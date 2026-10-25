@@ -36,14 +36,15 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <div class="fields">
 <div class="field"><label for="twi">Entrée eau (°C)</label><input id="twi" type="number" value="9" step="0.1"></div>
 <div class="field"><label for="two">Sortie eau (°C)</label><input id="two" type="number" value="16" step="0.1"></div>
-<div class="field"><label for="mw">Débit eau (kg/s)</label><input id="mw" type="number" value="0.59" min="0" step="0.01"><div class="help">Changer ce débit recalcule la température de sortie d’eau.</div></div>
+<div class="field"><label for="mw">Débit d’eau</label><input id="mw" type="number" value="0.59" min="0" step="any"><div class="help">Changer ce débit recalcule les résultats. Changer l’unité conserve le même débit physique.</div></div>
+<div class="field"><label for="waterUnit">Unité du débit d’eau</label><select id="waterUnit"><option value="kgs">kg/s — débit massique</option><option value="m3h">m³/h — débit volumique</option></select><div class="help" id="waterDensity">Conversion selon la masse volumique de l’eau.</div></div>
 <div class="field"><label for="u">Coefficient global U (W/m²·K)</label><input id="u" type="number" value="500" min="1" step="10"></div>
 <div class="field"><label for="area">Surface installée (m²)</label><input id="area" type="number" value="2.87" min="0" step="0.01"><div class="help">Changer cette surface recalcule les températures de sortie et la puissance. Sinon, elle reste une surface de comparaison.</div></div>
 <div class="field"><label for="minarea">Surface minimale imposée (m²)</label><input id="minarea" type="number" value="2" min="0" step="0.01"><div class="help">La surface recommandée ne descendra pas sous cette limite.</div></div>
 <div class="field"><label for="targetQ">Puissance demandée (kW)</label><input id="targetQ" type="number" value="100" min="0.1" step="1"><div class="help">Changer cette puissance recalcule le débit CO₂ et la surface nécessaire.</div></div>
 <div class="field"><label for="margin">Marge surface (%)</label><input id="margin" type="number" value="10" min="0" max="100" step="1"></div>
 </div>
-<div class="help">Le calcul utilise CoolProp pour le CO₂. Pour l’eau, cp est approché à 4,186 kJ/(kg·K).</div>
+<div class="help">Le calcul utilise CoolProp pour le CO₂. Pour l’eau, cp est approché à 4,186 kJ/(kg·K) ; la conversion kg/s ↔ m³/h utilise une masse volumique estimée selon la température moyenne de l’eau (eau pure, sans glycol).</div>
 <div class="actions"><button id="calc">Calculer</button><button class="secondary" id="reset">Réinitialiser l’exemple</button></div>
 </section>
 </div>
@@ -97,6 +98,16 @@ function lmtd(a,b){if(a<=0||b<=0)return NaN;if(Math.abs(a-b)<1e-8)return a;retur
 // sont calculées par conservation d'énergie et échange segmenté en contre-courant.
 let lastEdited='mco';
 const CPW=4.186;
+// Masse volumique approximative de l’eau pure à pression atmosphérique (0 à 100 °C).
+function waterDensity(T){
+ const t=Math.max(0,Math.min(100,T));
+ return 1000*(1-((t+288.9414)/(508929.2*(t+68.12963)))*Math.pow(t-3.9863,2));
+}
+function waterRho(){return waterDensity((num('twi')+num('two'))/2);}
+function massWaterFlow(){const v=num('mw');return $('waterUnit').value==='m3h'?v*waterRho()/3600:v;}
+function displayWaterFlow(mass){return $('waterUnit').value==='m3h'?mass*3600/waterRho():mass;}
+function updateWaterDensity(){set('waterDensity','Masse volumique estimée : '+fmt(waterRho(),1)+' kg/m³ (température moyenne).');}
+
 function surfaceFor(P,Ti,To,Twi,mco,mw,U,N){
  const hi=enthalpy(P,Ti),ho=enthalpy(P,To),Q=mco*(hi-ho);
  if(!(Q>0)||!(mw>0))return {valid:false,required:Infinity};
@@ -143,7 +154,7 @@ function calculate(){
  if(!CP)throw new Error('CoolProp n’est pas encore chargé.');
  const P=num('p'),Ti=num('tci'),Twi=num('twi'),U=num('u'),N=num('segments');
  const minArea=num('minarea'),margin=num('margin')/100,installed=num('area');
- let To=num('tco'),mco=num('mco'),mw=num('mw'),Two=num('two');
+ let To=num('tco'),mco=num('mco'),mw=massWaterFlow(),Two=num('two');
  if(![P,Ti,Twi,U,N,minArea,margin,installed].every(Number.isFinite)||P<=0||U<=0||N<2||minArea<0||margin<0||installed<=0||Ti<=Twi)
   throw new Error('Vérifie la pression, U, les températures d’entrée et les surfaces (valeurs positives).');
  if(lastEdited==='targetQ'){
@@ -164,11 +175,13 @@ function calculate(){
  if(!r.valid)throw new Error('Pincement thermique nul/négatif : échange impossible avec ces conditions. Modifie le débit d’eau, les températures ou la surface.');
  Two=r.Two;
  const required=r.area*(1+margin),recommended=Math.max(required,minArea);
- const outputs={mco:mco,mw:mw,tco:To,two:Two,targetQ:r.Q};
+ const outputs={mco:mco,tco:To,two:Two,targetQ:r.Q};
  for(const [id,v] of Object.entries(outputs)){
   if(document.activeElement!==$(id))$(id).value=Number(v.toPrecision(9));
  }
- set('q',fmt(r.Q)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3.6)+' m³/h');
+ if(document.activeElement!==$('mw'))$('mw').value=Number(displayWaterFlow(mw).toPrecision(9));
+ updateWaterDensity();
+ set('q',fmt(r.Q)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3600/waterRho(),3)+' m³/h');
  set('hin',fmt(r.hi,3));set('hout',fmt(r.ho,3));set('dh',fmt(r.dh,3));
  set('areareq',fmt(required)+' m²');set('arearec',fmt(recommended)+' m²');
  set('pinch',fmt(r.pinch)+' K');set('balance',fmt(r.Q-mw*CPW*(Two-Twi),4)+' kW');
@@ -186,14 +199,23 @@ function calculate(){
 function run(){try{calculate();}catch(e){$('status').className='status err';$('status').textContent=e.message;}}
 $('calc').addEventListener('click',run);
 $('reset').addEventListener('click',()=>{
- Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'coupled',segments:50,twi:9,two:16,mw:.59,u:500,area:2.87,minarea:2,targetQ:100,margin:10}).forEach(([k,v])=>$(k).value=v);
- lastEdited='mco';run();
+ Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'coupled',segments:50,twi:9,two:16,mw:.59,waterUnit:'kgs',u:500,area:2.87,minarea:2,targetQ:100,margin:10}).forEach(([k,v])=>$(k).value=v);
+ lastEdited='mco';$('waterUnit').dataset.previous='kgs';updateWaterDensity();run();
 });
 ['p','mco','tci','tco','segments','twi','two','mw','u','area','minarea','targetQ','margin'].forEach(id=>$(id).addEventListener('input',()=>{
  // Le débit CO₂, la puissance, la sortie eau et la surface sont des consignes alternatives.
  // Pour les autres paramètres, conserver la dernière consigne de débit CO₂ et la sortie CO₂.
  lastEdited=['targetQ','two','area'].includes(id)?id:'mco';run();
 }));
+$('waterUnit').addEventListener('change',()=>{
+ // L’unité change, pas le débit physique : convertir la valeur déjà affichée.
+ const previous=$('waterUnit').dataset.previous||'kgs';
+ const oldValue=num('mw');
+ const mass=previous==='m3h'?oldValue*waterRho()/3600:oldValue;
+ $('mw').value=Number(($('waterUnit').value==='m3h'?mass*3600/waterRho():mass).toPrecision(10));
+ $('waterUnit').dataset.previous=$('waterUnit').value;
+ run();
+});
 try{
  const wasmBase='https://cdn.jsdelivr.net/npm/coolprop-wasm@6.6.0/';
  const {default:createCoolProp}=await import(wasmBase+'coolprop.js');
