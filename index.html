@@ -27,7 +27,7 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <div class="field"><label for="mco">Débit massique CO₂ (kg/s)</label><input id="mco" type="number" value="0.056" min="0" step="0.001"><div class="help">Mettre 0 si le débit est inconnu.</div></div>
 <div class="field"><label for="tci">Température CO₂ entrée (°C)</label><input id="tci" type="number" value="123.7" step="0.1"></div>
 <div class="field"><label for="tco">Température CO₂ sortie (°C)</label><input id="tco" type="number" value="15.4" step="0.1"></div>
-<div class="field"><label for="mode">Pilotage automatique</label><select id="mode"><option value="coupled">Tous les paramètres liés — dernière modification prioritaire</option></select><div class="help">Tu changes une valeur : les autres valeurs dépendantes et la surface nécessaire se recalculent. La surface installée pilote les températures si tu la modifies.</div></div>
+<div class="field"><label for="mode">Pilotage automatique</label><select id="mode"><option value="coupled">Dimensionnement — calcul de surface</option><option value="diagnostic">Diagnostic — échangeur existant (surface fixe)</option></select><div class="help">En diagnostic, la surface installée reste fixe ; les réglages modifient la puissance disponible et la réserve. En dimensionnement, on calcule la surface nécessaire.</div></div>
 <div class="field"><label for="segments">Segments de calcul thermique</label><select id="segments"><option>20</option><option selected>50</option><option>100</option><option>200</option></select><div class="help">Plus de segments = profil thermique plus fin.</div></div>
 </div>
 </section>
@@ -38,10 +38,15 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <div class="field"><label for="two">Sortie eau (°C)</label><input id="two" type="number" value="16" step="0.1"></div>
 <div class="field"><label for="mw">Débit d’eau</label><input id="mw" type="number" value="0.59" min="0" step="any"><div class="help">Changer ce débit recalcule les résultats. Changer l’unité conserve le même débit physique.</div></div>
 <div class="field"><label for="waterUnit">Unité du débit d’eau</label><select id="waterUnit"><option value="kgs">kg/s — débit massique</option><option value="m3h">m³/h — débit volumique</option></select><div class="help" id="waterDensity">Conversion selon la masse volumique de l’eau.</div></div>
-<div class="field"><label for="u">Coefficient global U (W/m²·K)</label><input id="u" type="number" value="500" min="1" step="10"></div>
-<div class="field"><label for="area">Surface installée (m²)</label><input id="area" type="number" value="2.87" min="0" step="0.01"><div class="help">Changer cette surface recalcule les températures de sortie et la puissance. Sinon, elle reste une surface de comparaison.</div></div>
+<div class="field"><label for="uMode">Calcul du coefficient U</label><select id="uMode"><option value="auto">Automatique estimé (défaut)</option><option value="calibrated">Calibré sur site</option><option value="manual">Manuel / constructeur</option></select><div class="help">U estimé par loi de variation des débits, pas par corrélation constructeur.</div></div>
+<div class="field"><label for="u">U de référence / manuel (W/m²·K)</label><input id="u" type="number" value="500" min="1" step="10"><div class="help">Référence de départ pour l'estimation ; valeur imposée en manuel.</div></div>
+<div class="field"><label for="refMw">Débit eau de référence (kg/s)</label><input id="refMw" type="number" value="0.59" min="0.001" step="0.01"></div>
+<div class="field"><label for="refMco">Débit CO₂ de référence (kg/s)</label><input id="refMco" type="number" value="0.056" min="0.001" step="0.001"></div>
+<div class="field"><label for="waterShare">Part de résistance thermique côté eau (%)</label><input id="waterShare" type="number" value="50" min="0" max="100" step="5"><div class="help">Hypothèse : 50 % eau / 50 % CO₂, à ajuster avec données constructeur.</div></div>
+<div class="field"><label for="calibrate">Calibrage sur site</label><button class="secondary" id="calibrate" type="button">Calibrer avec les mesures saisies</button><div class="help">Saisir les températures entrée/sortie, débits, pression et surface mesurés, puis cliquer. Le calibrage est enregistré dans cette page jusqu'à réinitialisation.</div></div>
+<div class="field"><label for="area">Surface installée (m²)</label><input id="area" type="number" value="2.87" min="0" step="0.01"><div class="help">Surface réelle de l’échangeur. En diagnostic, elle reste fixe lorsque tu modifies les réglages.</div></div>
 <div class="field"><label for="minarea">Surface minimale imposée (m²)</label><input id="minarea" type="number" value="2" min="0" step="0.01"><div class="help">La surface recommandée ne descendra pas sous cette limite.</div></div>
-<div class="field"><label for="targetQ">Puissance demandée (kW)</label><input id="targetQ" type="number" value="100" min="0.1" step="1"><div class="help">Changer cette puissance recalcule le débit CO₂ et la surface nécessaire.</div></div>
+<div class="field"><label for="targetQ">Puissance demandée (kW)</label><input id="targetQ" type="number" value="100" min="0.1" step="1"><div class="help">Objectif à atteindre. En diagnostic, il sert à comparer la puissance demandée à la capacité calculée.</div></div>
 <div class="field"><label for="margin">Marge surface (%)</label><input id="margin" type="number" value="10" min="0" max="100" step="1"></div>
 </div>
 <div class="help">Le calcul utilise CoolProp pour le CO₂. Pour l’eau, cp est approché à 4,186 kJ/(kg·K) ; la conversion kg/s ↔ m³/h utilise une masse volumique estimée selon la température moyenne de l’eau (eau pure, sans glycol).</div>
@@ -52,12 +57,23 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <h2>3 · Résultats</h2>
 <div id="status" class="status">En attente du chargement de CoolProp…</div>
 <div class="metrics">
+<div class="metric"><small>U utilisé pour le calcul</small><strong id="uOut">—</strong></div>
+<div class="metric"><small>Origine du U</small><strong id="uSource">—</strong></div>
 <div class="metric"><small>Puissance thermique CO₂</small><strong id="q">—</strong></div>
 <div class="metric"><small>Débit massique CO₂</small><strong id="mcoOut">—</strong></div>
 <div class="metric"><small>Débit d’eau requis / bilan</small><strong id="mwOut">—</strong></div>
 <div class="metric"><small>Enthalpie CO₂ entrée</small><strong id="hin">—</strong><small>kJ/kg</small></div>
 <div class="metric"><small>Enthalpie CO₂ sortie</small><strong id="hout">—</strong><small>kJ/kg</small></div>
 <div class="metric"><small>Δh CO₂</small><strong id="dh">—</strong><small>kJ/kg</small></div>
+</div>
+<div style="height:12px"></div>
+<div class="metrics">
+<div class="metric"><small>Puissance demandée</small><strong id="demandOut">—</strong></div>
+<div class="metric"><small>Puissance atteignable avec surface installée</small><strong id="capacityOut">—</strong></div>
+<div class="metric"><small>Réserve / manque de puissance</small><strong id="powerGap">—</strong></div>
+<div class="metric"><small>État de l’échangeur</small><strong id="powerVerdict">—</strong></div>
+<div class="metric"><small>Sortie CO₂ atteignable</small><strong id="achievableTo">—</strong></div>
+<div class="metric"><small>Sortie eau atteignable</small><strong id="achievableTwo">—</strong></div>
 </div>
 <div style="height:12px"></div>
 <div class="metrics">
@@ -83,7 +99,7 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <p>Si un état P-T est dans une zone où le calcul de propriété échoue, l’outil affiche une erreur au lieu de fabriquer une valeur. Les enthalpies ont une référence arbitraire, mais leur différence est exploitable.</p>
 </details>
 </section>
-<p class="foot">CO₂ LAB — outil de pré-dimensionnement pédagogique. CoolProp est un projet open source indépendant. Ne pas utiliser seul pour valider une installation frigorifique.</p>
+<p class="foot">CO₂ LAB — outil de pré-dimensionnement et diagnostic pédagogique. Les marges de puissance sont des estimations à U constant ; vérifier les pertes de charge, l’encrassement et les données constructeur. CoolProp est un projet open source indépendant. Ne pas utiliser seul pour valider une installation frigorifique.</p>
 </main>
 <script type="module">
 let CP=null;
@@ -97,7 +113,44 @@ function lmtd(a,b){if(a<=0||b<=0)return NaN;if(Math.abs(a-b)<1e-8)return a;retur
 // Modèle couplé : le dernier champ modifié est prioritaire. Les autres grandeurs
 // sont calculées par conservation d'énergie et échange segmenté en contre-courant.
 let lastEdited='mco';
+let diagnosticDemand=100;
 const CPW=4.186;
+let siteCalibration=null;
+// Résistances en série : 1/U = R_eau + R_CO2 ; coefficients convectifs
+// approximés par h ~ débit^0,8. Géométrie, encrassement et régime non modélisés.
+function estimateU(mco,mw){
+ const mode=$('uMode').value;
+ if(mode==='manual')return num('u');
+ const base=mode==='calibrated'&&siteCalibration?siteCalibration:null;
+ const U0=base?base.U:num('u');
+ const mco0=base?base.mco:num('refMco');
+ const mw0=base?base.mw:num('refMw');
+ const waterFraction=num('waterShare')/100;
+ if(!(U0>0&&mco0>0&&mw0>0&&mco>0&&mw>0&&waterFraction>=0&&waterFraction<=1))throw new Error('Références du coefficient U invalides.');
+ const waterResistance=waterFraction*Math.pow(mw0/mw,0.8);
+ const coResistance=(1-waterFraction)*Math.pow(mco0/mco,0.8);
+ return U0/(waterResistance+coResistance);
+}
+function calibrateSite(){
+ if(!CP)throw new Error('CoolProp doit être chargé pour calibrer U.');
+ const P=num('p'),Ti=num('tci'),To=num('tco'),Twi=num('twi'),Two=num('two');
+ const mco=num('mco'),mw=massWaterFlow(),S=num('area'),N=num('segments');
+ if(!(mco>0&&mw>0&&S>0&&Ti>To&&To>Twi&&Two>Twi))throw new Error('Mesures incohérentes : vérifie températures, débits et surface.');
+ const Qco=mco*(enthalpy(P,Ti)-enthalpy(P,To));
+ const Qwater=mw*CPW*(Two-Twi);
+ const deviation=Math.abs(Qco-Qwater)/Math.max(Qco,Qwater);
+ if(!(Qco>0&&Qwater>0)||deviation>0.15)throw new Error('Calibrage refusé : écart du bilan eau/CO₂ supérieur à 15 %. Vérifie les mesures.');
+ // La surface requise est proportionnelle à 1/U pour le même profil thermique.
+ const r=surfaceFor(P,Ti,To,Twi,mco,mw,1,N);
+ if(!r.valid||!(r.area>0))throw new Error('Calibrage impossible : pincement thermique ou profil non valide.');
+ const Ucal=r.area/S;
+ if(!(Ucal>0&&Number.isFinite(Ucal)))throw new Error('Coefficient U calibré non valide.');
+ siteCalibration={U:Ucal,mco,mw,P,Ti,To,Twi,Two,deviation};
+ $('uMode').value='calibrated';
+ run();
+ $('status').textContent+=' Calibrage accepté : U effectif '+fmt(Ucal,1)+' W/m²·K, écart bilan '+fmt(100*deviation,1)+' %. Attention : extrapolation indicative.';
+}
+
 // Masse volumique approximative de l’eau pure à pression atmosphérique (0 à 100 °C).
 function waterDensity(T){
  const t=Math.max(0,Math.min(100,T));
@@ -152,61 +205,104 @@ function outletForArea(P,Ti,Twi,mco,mw,U,N,installed,margin){
 }
 function calculate(){
  if(!CP)throw new Error('CoolProp n’est pas encore chargé.');
- const P=num('p'),Ti=num('tci'),Twi=num('twi'),U=num('u'),N=num('segments');
+ const diagnostic=$('mode').value==='diagnostic';
+ const P=num('p'),Ti=num('tci'),Twi=num('twi'),N=num('segments');
  const minArea=num('minarea'),margin=num('margin')/100,installed=num('area');
  let To=num('tco'),mco=num('mco'),mw=massWaterFlow(),Two=num('two');
- if(![P,Ti,Twi,U,N,minArea,margin,installed].every(Number.isFinite)||P<=0||U<=0||N<2||minArea<0||margin<0||installed<=0||Ti<=Twi)
-  throw new Error('Vérifie la pression, U, les températures d’entrée et les surfaces (valeurs positives).');
- if(lastEdited==='targetQ'){
-  const q=num('targetQ'),dh=enthalpy(P,Ti)-enthalpy(P,To);
-  if(!(q>0&&dh>0))throw new Error('Puissance demandée et écart enthalpique doivent être positifs.');
-  mco=q/dh;
- }else if(lastEdited==='two'){
-  const q=mco*(enthalpy(P,Ti)-enthalpy(P,To));
-  if(!(Two>Twi))throw new Error('La sortie d’eau doit être supérieure à son entrée.');
-  mw=q/(CPW*(Two-Twi));
- }else if(lastEdited==='area'){
-  if(!(mco>0&&mw>0))throw new Error('Les deux débits doivent être positifs.');
-  const solved=outletForArea(P,Ti,Twi,mco,mw,U,N,installed,margin);
-  To=solved.To;
+ let U=estimateU(mco,mw);
+ if(![P,Ti,Twi,U,N,minArea,margin,installed,mco,mw].every(Number.isFinite)||P<=0||U<=0||N<2||minArea<0||margin<0||installed<=0||Ti<=Twi||mco<=0||mw<=0)
+  throw new Error('Vérifie les entrées : débits, pression, U et surface doivent être positifs ; entrée CO₂ plus chaude que l’eau.');
+ // En diagnostic, le débit CO₂ et la surface sont physiques : la puissance cible
+ // ne doit jamais modifier artificiellement le débit réel de l’installation.
+ if(!diagnostic){
+  if(lastEdited==='targetQ'){
+   const q=num('targetQ'),dh=enthalpy(P,Ti)-enthalpy(P,To);
+   if(!(q>0&&dh>0))throw new Error('Puissance demandée et écart enthalpique doivent être positifs.');
+   mco=q/dh;U=estimateU(mco,mw);
+  }else if(lastEdited==='two'){
+   const q=mco*(enthalpy(P,Ti)-enthalpy(P,To));
+   if(!(Two>Twi))throw new Error('La sortie d’eau doit être supérieure à son entrée.');
+   mw=q/(CPW*(Two-Twi));U=estimateU(mco,mw);
+  }else if(lastEdited==='area'){
+   To=outletForArea(P,Ti,Twi,mco,mw,U,N,installed,margin).To;
+  }
  }
- if(!(mco>0&&mw>0&&To<Ti&&To>Twi))throw new Error('Débits positifs et sortie CO₂ entre entrée d’eau et entrée CO₂ nécessaires.');
+ if(!(mco>0&&mw>0&&To<Ti&&To>Twi))throw new Error('Vérifie les débits et la température de sortie CO₂ visée (entre entrée eau et entrée CO₂).');
+ const targetQ=diagnostic?diagnosticDemand:mco*(enthalpy(P,Ti)-enthalpy(P,To));
+ // En diagnostic, la consigne de puissance et la température de sortie visée
+ // sont deux façons de définir un objectif ; la dernière modifiée prime.
+ if(diagnostic && lastEdited==='targetQ'){
+  const hi=enthalpy(P,Ti), wanted=hi-targetQ/mco;
+  // Recherche par température pour éviter une inversion P,H instable près du critique.
+  let lo=Twi+0.001,hiT=Ti-0.001;
+  const maxQ=mco*(hi-enthalpy(P,lo));
+  if(targetQ<=0||targetQ>=maxQ)throw new Error('Puissance demandée incompatible avec le débit CO₂ et les températures d’entrée.');
+  for(let i=0;i<55;i++){const mid=(lo+hiT)/2;if(enthalpy(P,mid)>wanted)hiT=mid;else lo=mid;}
+  To=(lo+hiT)/2;
+ }
+ const demand=mco*(enthalpy(P,Ti)-enthalpy(P,To));
+ // La capacité est calculée à partir de la surface réelle, et non supposée égale
+ // à la puissance demandée. La marge est réservée au dimensionnement.
+ const actual=outletForArea(P,Ti,Twi,mco,mw,U,N,installed,0);
+ const capacity=actual.result.Q;
+ const gap=capacity-demand;
+ const gapPct=demand>0?100*gap/demand:NaN;
  const r=surfaceFor(P,Ti,To,Twi,mco,mw,U,N);
- if(!r.valid)throw new Error('Pincement thermique nul/négatif : échange impossible avec ces conditions. Modifie le débit d’eau, les températures ou la surface.');
- Two=r.Two;
- const required=r.area*(1+margin),recommended=Math.max(required,minArea);
- const outputs={mco:mco,tco:To,two:Two,targetQ:r.Q};
- for(const [id,v] of Object.entries(outputs)){
-  if(document.activeElement!==$(id))$(id).value=Number(v.toPrecision(9));
+ const required=r.valid?r.area*(1+margin):Infinity;
+ const recommended=Math.max(required,minArea);
+ if(!diagnostic){
+  if(document.activeElement!==$('mco'))$('mco').value=Number(mco.toPrecision(9));
+  if(document.activeElement!==$('tco'))$('tco').value=Number(To.toPrecision(9));
+  if(document.activeElement!==$('two')&&r.valid)$('two').value=Number(r.Two.toPrecision(9));
+  if(document.activeElement!==$('targetQ'))$('targetQ').value=Number(demand.toPrecision(9));
+  if(document.activeElement!==$('mw'))$('mw').value=Number(displayWaterFlow(mw).toPrecision(9));
+ }else{
+  if(lastEdited==='targetQ'&&document.activeElement!==$('tco'))$('tco').value=Number(To.toPrecision(9));
+  if(lastEdited!=='targetQ'&&document.activeElement!==$('targetQ'))$('targetQ').value=Number(demand.toPrecision(9));
+  // Afficher la température d'eau atteignable séparément ; ne pas modifier
+  // la température d'eau renseignée par le technicien.
  }
- if(document.activeElement!==$('mw'))$('mw').value=Number(displayWaterFlow(mw).toPrecision(9));
  updateWaterDensity();
- set('q',fmt(r.Q)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3600/waterRho(),3)+' m³/h');
- set('hin',fmt(r.hi,3));set('hout',fmt(r.ho,3));set('dh',fmt(r.dh,3));
- set('areareq',fmt(required)+' m²');set('arearec',fmt(recommended)+' m²');
- set('pinch',fmt(r.pinch)+' K');set('balance',fmt(r.Q-mw*CPW*(Two-Twi),4)+' kW');
+ set('uOut',fmt(U,1)+' W/m²·K');set('uSource',$('uMode').value==='manual'?'Manuel':$('uMode').value==='calibrated'?(siteCalibration?'Calibré + extrapolé':'Non calibré : estimation'):'Estimation');
+ set('q',fmt(demand)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3600/waterRho(),3)+' m³/h');
+ const hi=enthalpy(P,Ti),ho=enthalpy(P,To);
+ set('hin',fmt(hi,3));set('hout',fmt(ho,3));set('dh',fmt(hi-ho,3));
+ set('areareq',Number.isFinite(required)?fmt(required)+' m²':'Impossible (pincement)');
+ set('arearec',Number.isFinite(recommended)?fmt(recommended)+' m²':'Impossible');
+ set('pinch',fmt(r.pinch)+' K');set('balance',r.valid?fmt(r.Q-mw*CPW*(r.Two-Twi),4)+' kW':'—');
+ set('demandOut',fmt(demand)+' kW');set('capacityOut',fmt(capacity)+' kW');
+ set('powerGap',(gap>=0?'+':'')+fmt(gap)+' kW ('+(gapPct>=0?'+':'')+fmt(gapPct,1)+' %)');
+ set('powerVerdict',Math.abs(gap)<0.05?'À l’équilibre':gap>0?'Réserve disponible':'Puissance insuffisante');
+ $('powerGap').className=gap>=0?'good':'error';$('powerVerdict').className=gap>=0?'good':'error';
+ set('achievableTo',fmt(actual.To)+' °C');set('achievableTwo',fmt(actual.result.Two)+' °C');
  set('tp1',fmt(P)+' bar');set('tp2',fmt(P)+' bar');set('tt1',fmt(Ti)+' °C');set('tt2',fmt(To)+' °C');
  set('rho1',fmt(prop('D',P,Ti),3));set('rho2',fmt(prop('D',P,To),3));
  set('cp1',fmt(prop('C',P,Ti)/1000,3));set('cp2',fmt(prop('C',P,To)/1000,3));
  const warnings=[];
- if(required>installed+1e-5)warnings.push('Surface installée insuffisante de '+fmt(required-installed)+' m² pour atteindre la sortie CO₂ indiquée.');
+ if(gap<-.05)warnings.push('Échangeur insuffisant de '+fmt(-gap)+' kW pour la consigne demandée.');
  if(installed<minArea)warnings.push('Surface installée inférieure au minimum imposé de '+fmt(minArea)+' m².');
- if(P>73.773&&To<31)warnings.push('Attention : propriétés CO₂ fortement variables près de la zone critique.');
+ if(!r.valid)warnings.push('Consigne de sortie CO₂ impossible : pincement thermique.');
+ if($('uMode').value==='calibrated'&&!siteCalibration)warnings.push('Aucun calibrage enregistré : U estimé avec la référence manuelle.');
+ if(P>73.773&&To<31)warnings.push('Propriétés CO₂ fortement variables près de la zone critique.');
  $('status').className='status '+(warnings.length?'err':'ok');
- $('status').textContent=warnings.join(' ')||'Bilan couplé cohérent. Les résultats sont mis à jour automatiquement.';
- $('steps').innerHTML=`<div class="step"><b>Dernière consigne</b>${lastEdited} : priorité à ta dernière modification.</div><div class="step"><b>Énergie</b>${fmt(mco,4)} kg/s × ${fmt(r.dh,3)} kJ/kg = ${fmt(r.Q)} kW. Eau : ${fmt(mw,4)} kg/s, ${fmt(Twi)} → ${fmt(Two)} °C.</div><div class="step"><b>Échangeur</b>Surface thermique calculée ${fmt(r.area)} m², avec marge ${fmt(required)} m², minimum imposé ${fmt(minArea)} m², recommandée ${fmt(recommended)} m².</div><div class="step"><b>Surface installée</b>${fmt(installed)} m² ; ${required>installed?'objectif non atteint avec cette surface':'surface suffisante pour l’objectif calculé'}.</div>`;
+ $('status').textContent=warnings.join(' ')||(diagnostic?'Diagnostic : échangeur existant suffisant pour l’objectif calculé.':'Dimensionnement : résultats actualisés.');
+ $('steps').innerHTML=`<div class="step"><b>Mode</b>${diagnostic?'Diagnostic : surface installée fixe':'Dimensionnement : surface nécessaire calculée'} (${fmt(installed)} m²).</div><div class="step"><b>Objectif</b>${fmt(demand)} kW, sortie CO₂ visée ${fmt(To)} °C.</div><div class="step"><b>Capacité estimée</b>${fmt(capacity)} kW, sortie CO₂ atteignable ${fmt(actual.To)} °C, sortie eau atteignable ${fmt(actual.result.Two)} °C.</div><div class="step"><b>Réserve de puissance</b>${(gap>=0?'+':'')+fmt(gap)} kW (${(gapPct>=0?'+':'')+fmt(gapPct,1)} %). Surface théorique avec marge : ${Number.isFinite(required)?fmt(required)+' m²':'non atteignable'}.</div>`;
 }
 function run(){try{calculate();}catch(e){$('status').className='status err';$('status').textContent=e.message;}}
 $('calc').addEventListener('click',run);
+$('calibrate').addEventListener('click',()=>{try{calibrateSite();}catch(e){$('status').className='status err';$('status').textContent=e.message;}});
 $('reset').addEventListener('click',()=>{
- Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'coupled',segments:50,twi:9,two:16,mw:.59,waterUnit:'kgs',u:500,area:2.87,minarea:2,targetQ:100,margin:10}).forEach(([k,v])=>$(k).value=v);
- lastEdited='mco';$('waterUnit').dataset.previous='kgs';updateWaterDensity();run();
+ Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'coupled',segments:50,twi:9,two:16,mw:.59,waterUnit:'kgs',uMode:'auto',u:500,refMw:.59,refMco:.056,waterShare:50,area:2.87,minarea:2,targetQ:100,margin:10}).forEach(([k,v])=>$(k).value=v);
+ lastEdited='mco';diagnosticDemand=100;siteCalibration=null;$('waterUnit').dataset.previous='kgs';updateWaterDensity();run();
 });
-['p','mco','tci','tco','segments','twi','two','mw','u','area','minarea','targetQ','margin'].forEach(id=>$(id).addEventListener('input',()=>{
+['p','mco','tci','tco','segments','twi','two','mw','u','uMode','refMw','refMco','waterShare','area','minarea','targetQ','margin'].forEach(id=>$(id).addEventListener('input',()=>{
  // Le débit CO₂, la puissance, la sortie eau et la surface sont des consignes alternatives.
  // Pour les autres paramètres, conserver la dernière consigne de débit CO₂ et la sortie CO₂.
- lastEdited=['targetQ','two','area'].includes(id)?id:'mco';run();
+ lastEdited=['targetQ','two','area'].includes(id)?id:'mco';
+ if($('mode').value==='diagnostic'&&id==='targetQ')diagnosticDemand=num('targetQ');
+ run();
 }));
+$('mode').addEventListener('change',()=>{lastEdited='mco';diagnosticDemand=num('targetQ');run();});
 $('waterUnit').addEventListener('change',()=>{
  // L’unité change, pas le débit physique : convertir la valeur déjà affichée.
  const previous=$('waterUnit').dataset.previous||'kgs';
