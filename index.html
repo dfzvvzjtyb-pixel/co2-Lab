@@ -150,7 +150,7 @@ $('calc').addEventListener('click',()=>{try{calculate()}catch(e){$('status').cla
 $('reset').addEventListener('click',()=>{Object.entries({p:96,mco:.056,tci:123.7,tco:15.4,mode:'co2',segments:50,twi:9,two:16,mw:.59,u:500,area:2.87,margin:10}).forEach(([k,v])=>$(k).value=v);if(CP){try{calculate()}catch(e){$('status').textContent=e.message}}});
 ['p','mco','tci','tco','mode','segments','twi','two','mw','u','area','margin'].forEach(id=>$(id).addEventListener('change',()=>{if(CP){try{calculate()}catch(e){$('status').className='status err';$('status').textContent=e.message}}}));
 try{
- const wasmBase='https://cdn.jsdelivr.net/npm/coolprop-wasm@6.6.0/wasm/';
+ const wasmBase='https://cdn.jsdelivr.net/npm/coolprop-wasm@6.6.0/';
  const {default:createCoolProp}=await import(wasmBase+'coolprop.js');
  CP=await createCoolProp({locateFile:(path)=>new URL(path,wasmBase).href});
  set('enginePill','Moteur CoolProp chargé');$('enginePill').className='pill';
