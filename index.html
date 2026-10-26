@@ -254,23 +254,16 @@ function outletForArea(P,Ti,Twi,mco,mw,U,N,installed,margin){
  if(hi<=lo)throw new Error('Température CO₂ entrée trop proche de celle de l’eau.');
  const top=surfaceFor(P,Ti,hi,Twi,mco,mw,U,N);
  if(!top.valid)throw new Error('Conditions d’échange impossibles même avec une très faible puissance.');
- // Si le pincement est atteint avant la température de l’eau, chercher
- // le premier état thermiquement admissible par balayage.
- let bracket=null,prevT=hi,prev=top;
- for(let j=1;j<=120;j++){
-  const t=hi-(hi-lo)*j/120;
-  const r=surfaceFor(P,Ti,t,Twi,mco,mw,U,N);
-  if(!r.valid || r.area*(1+margin)>installed){bracket=[t,prevT];break;}
-  prevT=t;prev=r;
+ // Recherche dichotomique directe : évite 120 balayages complets par appel.
+ // Le domaine admissible se rétrécit quand la sortie CO₂ baisse.
+ let lower=lo,upper=hi,best=top;
+ for(let i=0;i<32;i++){
+  const mid=(lower+upper)/2;
+  const r=surfaceFor(P,Ti,mid,Twi,mco,mw,U,N);
+  if(!r.valid || r.area*(1+margin)>installed)lower=mid;
+  else {upper=mid;best=r;}
  }
- if(!bracket){return {To:prevT,result:prev,limit:true};}
- let [lower,upper]=bracket;
- for(let i=0;i<35;i++){
-  const mid=(lower+upper)/2,r=surfaceFor(P,Ti,mid,Twi,mco,mw,U,N);
-  if(!r.valid||r.area*(1+margin)>installed)lower=mid;
-  else upper=mid;
- }
- const To=upper;return {To,result:surfaceFor(P,Ti,To,Twi,mco,mw,U,N),limit:false};
+ return {To:upper,result:best,limit:upper<=lo+0.002};
 }
 function calculate(){
  if(!CP)throw new Error('CoolProp n’est pas encore chargé.');
@@ -381,7 +374,9 @@ function updateEducation(r){
  $('eduExplanation').innerHTML=lessons[activeLesson]+extra;
 }
 document.querySelectorAll('[data-lesson]').forEach(b=>b.addEventListener('click',()=>{activeLesson=b.dataset.lesson;document.querySelectorAll('[data-lesson]').forEach(x=>x.classList.toggle('active',x===b));updateEducation(lastResult);}));
-function run(){try{calculate();}catch(e){$('status').className='status err';$('status').textContent=e.message;}}
+let pendingCalc=null;
+function run(){if(pendingCalc!==null){clearTimeout(pendingCalc);pendingCalc=null;}try{calculate();}catch(e){$('status').className='status err';$('status').textContent=e.message;}}
+function scheduleRun(){if(pendingCalc!==null)clearTimeout(pendingCalc);$('status').className='status';$('status').textContent='Saisie en cours — calcul dans 450 ms…';pendingCalc=setTimeout(()=>{pendingCalc=null;run();},450);}
 $('calc').addEventListener('click',run);
 $('calibrate').addEventListener('click',()=>{try{calibrateSite();}catch(e){$('status').className='status err';$('status').textContent=e.message;}});
 $('reset').addEventListener('click',()=>{
@@ -393,7 +388,7 @@ $('reset').addEventListener('click',()=>{
  // Pour les autres paramètres, conserver la dernière consigne de débit CO₂ et la sortie CO₂.
  lastEdited=['targetQ','two','area'].includes(id)?id:'mco';
  if($('mode').value==='diagnostic'&&id==='targetQ')diagnosticDemand=num('targetQ');
- run();
+ scheduleRun();
 }));
 $('mode').addEventListener('change',()=>{lastEdited='mco';diagnosticDemand=num('targetQ');run();});
 $('waterUnit').addEventListener('change',()=>{
@@ -403,7 +398,7 @@ $('waterUnit').addEventListener('change',()=>{
  const mass=previous==='m3h'?oldValue*waterRho()/3600:oldValue;
  $('mw').value=Number(($('waterUnit').value==='m3h'?mass*3600/waterRho():mass).toPrecision(10));
  $('waterUnit').dataset.previous=$('waterUnit').value;
- run();
+ scheduleRun();
 });
 function readOptional(id){const s=$(id).value.trim();return s===''?null:Number(s);}
 function updateExtras(r){
@@ -422,14 +417,22 @@ function updateExtras(r){
  const rows=[['Puissance demandée',baseline.demand,r.demand,'kW'],['Puissance disponible',baseline.capacity,r.capacity,'kW'],['Réserve',baseline.gap,r.gap,'kW'],['Sortie CO₂ atteignable',baseline.To,r.To,'°C'],['Sortie eau atteignable',baseline.Two,r.Two,'°C'],['U estimé',baseline.U,r.U,'W/m²·K'],['Surface nécessaire',baseline.required,r.required,'m²']];
  $('comparison').innerHTML='<table><thead><tr><th>Grandeur</th><th>Avant</th><th>Après</th><th>Écart</th></tr></thead><tbody>'+rows.map(([n,a,b,u])=>'<tr><td>'+n+'</td><td>'+fmt(a)+' '+u+'</td><td>'+fmt(b)+' '+u+'</td><td>'+fmt(b-a)+' '+u+'</td></tr>').join('')+'</tbody></table>';
  }
+ // Le balayage est volontairement à la demande : il était recalculé 7 fois à chaque frappe.
+ $('sweep').dataset.stale='1';
+ $('sweep').textContent='Courbe de sensibilité non recalculée. Appuyer sur « Calculer la sensibilité ».';
+}
+const sweepButton=document.createElement('button');
+sweepButton.type='button';sweepButton.textContent='Calculer la sensibilité (5 débits)';
+$('sweep').before(sweepButton);
+sweepButton.addEventListener('click',()=>{if(!lastResult)return;sweepButton.disabled=true;sweepButton.textContent='Calcul en cours…';setTimeout(()=>{try{const r=lastResult;
  // Sensibilité : recalcul volontairement limité à 7 points pour le mobile.
- const samples=[];const N=Math.min(30,num('segments'));
- for(let k=0;k<7;k++){
-  const flow=r.mw*(0.5+k/6);
+ const samples=[];const N=Math.min(20,num('segments'));
+ for(let k=0;k<5;k++){
+  const flow=r.mw*(0.5+k/4);
   try{const u=estimateU(r.mco,flow),o=outletForArea(r.P,r.Ti,r.Twi,r.mco,flow,u,N,r.installed,0);samples.push({flow,q:o.result.Q,to:o.To});}catch(e){samples.push({flow,q:NaN,to:NaN});}
  }
  $('sweep').innerHTML='<table><thead><tr><th>Débit eau (kg/s)</th><th>Capacité (kW)</th><th>Sortie CO₂ (°C)</th></tr></thead><tbody>'+samples.map(x=>'<tr><td>'+fmt(x.flow,3)+'</td><td>'+fmt(x.q,2)+'</td><td>'+fmt(x.to,2)+'</td></tr>').join('')+'</tbody></table>';
-}
+}catch(e){$('sweep').textContent='Erreur : '+e.message;}finally{sweepButton.disabled=false;sweepButton.textContent='Recalculer la sensibilité (5 débits)';}},20);});
 $('snapshot').addEventListener('click',()=>{if(lastResult){baseline={...lastResult};updateExtras(lastResult);}});
 $('report').addEventListener('click',()=>window.print());
 $('export').addEventListener('click',()=>{
