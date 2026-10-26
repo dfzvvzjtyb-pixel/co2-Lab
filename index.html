@@ -41,7 +41,7 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <div class="field"><label for="mw">Débit d’eau</label><input id="mw" type="number" value="0.59" min="0" step="any"><div class="help">Changer ce débit recalcule les résultats. Changer l’unité conserve le même débit physique.</div></div>
 <div class="field"><label for="waterUnit">Unité du débit d’eau</label><select id="waterUnit"><option value="kgs">kg/s — débit massique</option><option value="m3h">m³/h — débit volumique</option></select><div class="help" id="waterDensity">Conversion selon la masse volumique de l’eau.</div></div>
 <div class="field"><label for="fluid">Fluide secondaire</label><select id="fluid"><option value="Water">Eau pure</option><option value="MEG">MEG — éthylène glycol</option><option value="MPG">MPG — propylène glycol</option></select></div><div class="field"><label for="glycol">Glycol (% massique)</label><input id="glycol" type="number" value="30" min="0" max="60" step="1"><div class="help">Utilisé uniquement avec MEG / MPG. Propriétés CoolProp si disponibles.</div></div>
-<div class="field"><label for="uMode">Calcul du coefficient U</label><select id="uMode"><option value="auto">Automatique estimé (défaut)</option><option value="calibrated">Calibré sur site</option><option value="manual">Manuel / constructeur</option></select><div class="help">U estimé par loi de variation des débits, pas par corrélation constructeur.</div></div>
+<div class="field"><label for="uMode">Calcul du coefficient U</label><select id="uMode"><option value="auto">Automatique estimé (défaut)</option><option value="calibrated">Calibré sur site</option><option value="manual">Manuel / constructeur</option></select><div class="help">U estimé par débits ET zones thermodynamiques (gaz, condensation, liquide, transcritique). Facteurs indicatifs à calibrer.</div></div>
 <div class="field"><label for="u">U de référence / manuel (W/m²·K)</label><input id="u" type="number" value="500" min="1" step="10"><div class="help">Référence de départ pour l'estimation ; valeur imposée en manuel.</div></div>
 <div class="field"><label for="refMw">Débit eau de référence (kg/s)</label><input id="refMw" type="number" value="0.59" min="0.001" step="0.01"></div>
 <div class="field"><label for="refMco">Débit CO₂ de référence (kg/s)</label><input id="refMco" type="number" value="0.056" min="0.001" step="0.001"></div>
@@ -58,6 +58,7 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 </div>
 <section class="panel">
 <h2>3 · Résultats</h2>
+<div class="panel" style="margin:12px 0"><b>Répartition par zone thermique CO₂</b><div id="phaseSummary" class="help" style="margin-top:8px">En attente du calcul…</div><div class="help">U par zone = estimation indicative, non une corrélation constructeur. Le U manuel reste uniforme. Le U calibré est un ajustement global autour du point mesuré. Le calcul suppose une pression CO₂ constante dans l’échangeur.</div></div>
 <div id="status" class="status">En attente du chargement de CoolProp…</div>
 <div class="metrics">
 <div class="metric"><small>U utilisé pour le calcul</small><strong id="uOut">—</strong></div>
@@ -90,7 +91,7 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <section class="panel"><h2>4 · Comprendre le calcul</h2><div class="steps" id="steps">
 <div class="step"><b>Étape 1 — propriétés réelles</b>CoolProp calcule l’enthalpie à chaque extrémité à partir de P et T.</div>
 <div class="step"><b>Étape 2 — bilan énergétique</b>La puissance est calculée à partir de la différence d’enthalpie et du débit massique.</div>
-<div class="step"><b>Étape 3 — profil segmenté</b>Le CO₂ est divisé en segments ; l’eau évolue en contre-courant et la surface est estimée segment par segment.</div>
+<div class="step"><b>Étape 3 — profil segmenté</b>Le CO₂ est divisé en segments ; chaque segment reçoit un U adapté à sa zone thermodynamique (estimation non constructeur).</div>
 </div></section>
 <section class="panel"><h2>5 · Propriétés calculées</h2><div class="tablewrap"><table><thead><tr><th>Propriété</th><th>Entrée CO₂</th><th>Sortie CO₂</th></tr></thead><tbody>
 <tr><td>Pression</td><td id="tp1">—</td><td id="tp2">—</td></tr><tr><td>Température</td><td id="tt1">—</td><td id="tt2">—</td></tr><tr><td>Densité (kg/m³)</td><td id="rho1">—</td><td id="rho2">—</td></tr><tr><td>Cp local (kJ/kg·K)</td><td id="cp1">—</td><td id="cp2">—</td></tr>
@@ -118,15 +119,15 @@ main{max-width:1050px;margin:auto;padding:20px}header{display:flex;gap:14px;alig
 <svg id="eduSvg" class="edu-diagram" viewBox="0 0 760 320" role="img" aria-label="Schéma de l’échangeur à contre-courant et profil thermique"><text x="24" y="35" fill="#eff7f9">En attente des résultats CoolProp…</text></svg>
 <div class="edu-legend"><span class="hot">CO₂ chaud</span><span class="cold">Eau froide</span></div>
 <div id="eduExplanation" class="edu-note">Les explications apparaîtront dès que le calcul sera disponible.</div>
-<div class="edu-note"><b>Ce qui est calculé / ce qui est estimé</b><small>Les propriétés CO₂ et le bilan enthalpique proviennent de CoolProp. Les températures atteignables dépendent du modèle de surface segmentée et d'un U global supposé uniforme. La géométrie, les distributions locales et les pertes de charge réelles ne sont pas résolues.</small></div>
+<div class="edu-note"><b>Ce qui est calculé / ce qui est estimé</b><small>Les propriétés CO₂ et le bilan enthalpique proviennent de CoolProp. Les températures atteignables dépendent du modèle de surface segmentée et d'un U local estimé par zone thermodynamique. La géométrie, les distributions locales et les pertes de charge réelles ne sont pas résolues.</small></div>
 </section>
 <section class="panel">
 <details><summary>Hypothèses et limites du modèle</summary>
-<p>Le moteur de propriétés CoolProp fournit les propriétés du CO₂ via l’API PropsSI. Le bilan énergétique est enthalpique. La surface est estimée par une méthode segmentée en contre-courant avec U supposé constant. Ce n’est pas une sélection constructeur : la géométrie des plaques et la distribution des débits ne sont pas modélisées. Les pertes de charge et le U évolutif sont des extrapolations indicatives, non des calculs constructeur.</p>
+<p>Le moteur de propriétés CoolProp fournit les propriétés du CO₂ via l’API PropsSI. Le bilan énergétique est enthalpique. La surface est estimée par une méthode segmentée en contre-courant avec U local estimé par zone (ou U uniforme en mode manuel). Ce n’est pas une sélection constructeur : la géométrie des plaques et la distribution des débits ne sont pas modélisées. Les pertes de charge et le U évolutif sont des extrapolations indicatives, non des calculs constructeur.</p>
 <p>Si un état P-T est dans une zone où le calcul de propriété échoue, l’outil affiche une erreur au lieu de fabriquer une valeur. Les enthalpies ont une référence arbitraire, mais leur différence est exploitable.</p>
 </details>
 </section>
-<p class="foot">CO₂ LAB — outil de pré-dimensionnement et diagnostic pédagogique. Les marges de puissance sont des estimations à U constant ; vérifier les pertes de charge, l’encrassement et les données constructeur. CoolProp est un projet open source indépendant. Ne pas utiliser seul pour valider une installation frigorifique.</p>
+<p class="foot">CO₂ LAB — outil de pré-dimensionnement et diagnostic pédagogique. Les marges de puissance reposent sur des coefficients U estimés par zone ; vérifier les pertes de charge, l’encrassement et les données constructeur. CoolProp est un projet open source indépendant. Ne pas utiliser seul pour valider une installation frigorifique.</p>
 </main>
 <script type="module">
 let CP=null;
@@ -198,11 +199,36 @@ function massWaterFlow(){const v=num('mw');return $('waterUnit').value==='m3h'?v
 function displayWaterFlow(mass){return $('waterUnit').value==='m3h'?mass*3600/waterRho():mass;}
 function updateWaterDensity(){set('waterDensity','Masse volumique : '+fmt(waterRho(),1)+' kg/m³ ; cp : '+fmt(cpWater(),3)+' kJ/(kg·K) (température moyenne).');}
 
+// Classification basée sur P et les enthalpies de saturation CoolProp.
+// Au-dessus du point critique, la zone pseudocritique n'est pas une condensation.
+const P_CRIT_CO2=73.773;
+function phaseContext(P){
+ if(P>=P_CRIT_CO2)return {kind:'transcritique'};
+ try{
+  const hf=CP.PropsSI('H','P',P*1e5,'Q',0,'CO2')/1000;
+  const hg=CP.PropsSI('H','P',P*1e5,'Q',1,'CO2')/1000;
+  if(!(hg>hf))throw Error('saturation');
+  return {kind:'subcritique',hf,hg};
+ }catch(e){return {kind:'monophasique',reason:'Saturation non disponible à cette pression'};}
+}
+function phaseZone(ctx,h){
+ if(ctx.kind==='transcritique')return 'transcritique';
+ if(ctx.kind!=='subcritique')return 'indetermine';
+ const tol=Math.max(.001,(ctx.hg-ctx.hf)*1e-5);
+ if(h>ctx.hg+tol)return 'gaz';
+ if(h<ctx.hf-tol)return 'liquide';
+ return 'condensation';
+}
+// Coefficients indicatifs relatifs au U de base (aucune corrélation géométrique).
+// En mode manuel, U reste uniforme. Le calibrage sur site ajuste le niveau global.
+const PHASE_FACTORS={transcritique:1,gaz:.75,condensation:1.65,liquide:.85,indetermine:1};
+function localU(base,zone){return $('uMode').value==='manual'?base:base*(PHASE_FACTORS[zone]||1);}
 function surfaceFor(P,Ti,To,Twi,mco,mw,U,N){
  const hi=enthalpy(P,Ti),ho=enthalpy(P,To),Q=mco*(hi-ho);
  if(!(Q>0)||!(mw>0))return {valid:false,required:Infinity};
  const Two=Twi+Q/(mw*cpWater());
  let area=0,pinch=Infinity,lastT=Ti,lastH=hi;
+ const ctx=phaseContext(P),zones={};
  for(let i=1;i<=N;i++){
   const T=Ti+(To-Ti)*i/N, h=i===N?ho:enthalpy(P,T);
   const q=mco*(lastH-h);
@@ -212,9 +238,15 @@ function surfaceFor(P,Ti,To,Twi,mco,mw,U,N){
   pinch=Math.min(pinch,d0,d1);
   const d=lmtd(d0,d1);
   if(!(q>=0)||!(d>0))return {valid:false,required:Infinity,pinch,Two,Q};
-  area+=q*1000/(U*d);lastT=T;lastH=h;
+  const zone=phaseZone(ctx,(lastH+h)/2);
+  const ui=localU(U,zone);
+  const segmentArea=q*1000/(ui*d);
+  area+=segmentArea;
+  if(!zones[zone])zones[zone]={area:0,q:0,segments:0,u:ui};
+  zones[zone].area+=segmentArea;zones[zone].q+=q;zones[zone].segments++;
+  lastT=T;lastH=h;
  }
- return {valid:Number.isFinite(area),area,pinch,Two,Q,hi,ho,dh:hi-ho};
+ return {valid:Number.isFinite(area),area,pinch,Two,Q,hi,ho,dh:hi-ho,zones,phaseKind:ctx.kind};
 }
 function outletForArea(P,Ti,Twi,mco,mw,U,N,installed,margin){
  // Pour les conditions imposées, recherche la sortie CO₂ compatible avec UA.
@@ -300,6 +332,7 @@ function calculate(){
   // la température d'eau renseignée par le technicien.
  }
  updateWaterDensity();
+ set('phaseSummary',r.valid&&r.zones?Object.entries(r.zones).map(([z,v])=>z+' : '+fmt(v.q,1)+' kW, '+fmt(v.area,2)+' m², U≈'+fmt(v.u,0)).join(' | '):'Profil non calculable');
  set('uOut',fmt(U,1)+' W/m²·K');set('uSource',$('uMode').value==='manual'?'Manuel':$('uMode').value==='calibrated'?(siteCalibration?'Calibré + extrapolé':'Non calibré : estimation'):'Estimation');
  set('q',fmt(demand)+' kW');set('mcoOut',fmt(mco,4)+' kg/s');set('mwOut',fmt(mw,4)+' kg/s · '+fmt(mw*3600/waterRho(),3)+' m³/h');
  const hi=enthalpy(P,Ti),ho=enthalpy(P,To);
